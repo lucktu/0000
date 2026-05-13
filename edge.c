@@ -1525,6 +1525,8 @@ static void check_keepalive( n2n_edge_t * eee, time_t now )
 
     /* Skip keepalive entirely if there's recent direct P2P communication */
     if (eee->last_p2p > 0 && (now - eee->last_p2p) < KEEPALIVE_IDLE_SECONDS) return;
+    /* Also skip if there's recent relay (supernode) communication */
+    if (eee->last_sup > 0 && (now - eee->last_sup) < KEEPALIVE_IDLE_SECONDS) return;
 
     while ( scan ) {
         struct peer_info *next = scan->next;
@@ -3950,9 +3952,11 @@ static int check_supernode_domain_and_update(n2n_edge_t * eee, time_t now)
         return 0;
     }
     
-    /* Only resolve if edge is idle (no P2P communication in last 30 seconds) */
-    /* Note: We don't check last_sup because regular keepalive would prevent updates */
+    /* Only resolve if edge is idle (no communication in last 30 seconds) */
     if ((now - eee->last_p2p <= 30)) {
+        return 0;
+    }
+    if ((now - eee->last_sup <= 30)) {
         return 0;
     }
     
