@@ -51,9 +51,9 @@ jobs:
           - target: x86_64-linux-musl_static
             os: ubuntu-latest
             URL: x86_64-linux-musl
-          - target: x86_64-linux-musl
-            os: ubuntu-latest
-            URL: x86_64-linux-musl
+#          - target: x86_64-linux-musl
+#            os: ubuntu-latest
+#            URL: x86_64-linux-musl
 
 #          - target: i686-linux-musl_static
 #            os: ubuntu-latest
@@ -93,9 +93,9 @@ jobs:
           - target: mipsel-linux-musl_static
             os: ubuntu-latest
             URL: mipsel-linux-muslsf
-          - target: mipsel-linux-musl
-            os: ubuntu-latest
-            URL: mipsel-linux-muslsf
+#          - target: mipsel-linux-musl
+#            os: ubuntu-latest
+#            URL: mipsel-linux-muslsf
 
 #          - target: mips-linux-musl_static
 #            os: ubuntu-latest
