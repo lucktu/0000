@@ -496,7 +496,7 @@ static int setup_encryption(n2n_edge_t *eee, int encrypt_mode, const char *encry
     
     if (encrypt_mode == 2) {
         if (!encrypt_key) {
-            traceEvent(TRACE_WARNING, "No encryption key provided, falling back to no encryption");
+            traceEvent(TRACE_WARNING, "No encryption key, using B1");
             eee->null_transop = 1;
             return 0;
         }
@@ -3407,6 +3407,10 @@ static void readFromIPSocket( n2n_edge_t * eee, SOCKET fd )
                                     traceEvent(TRACE_NORMAL, "TAP interface configured with IP %s/%u",
                                                assigned_ip_str, eee->device.ip_prefixlen);
                             }
+                        } else if (!default_ip_assignment && ra.dev_addr.net_addr == 0) {
+                            traceEvent(TRACE_ERROR, "%s is already in use, exiting",
+                                       inet_ntoa(*(struct in_addr*)&eee->device.ip_addr));
+                            exit(1);
                         }
 
                         /* Set sn_caps before daemonize so the log line is visible on terminal */
