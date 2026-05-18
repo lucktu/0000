@@ -659,10 +659,32 @@ static int update_edge( n2n_sn_t * sss,
             uint32_t assigned_ip;
             if (requested_ip != 0) {
                 assigned_ip = ntohl(requested_ip);
-                traceEvent(TRACE_DEBUG, "Edge %s using static IP %u.%u.%u.%u",
-                           macaddr_str(mac_buf, edgeMac),
-                           (assigned_ip>>24)&0xFF, (assigned_ip>>16)&0xFF,
-                           (assigned_ip>>8)&0xFF, assigned_ip&0xFF);
+                {
+                    struct peer_info *check = sss->edges;
+                    int ip_conflict = 0;
+                    while (check) {
+                        if (memcmp(check->community_name, community, sizeof(n2n_community_t)) == 0 &&
+                            memcmp(check->mac_addr, edgeMac, sizeof(n2n_mac_t)) != 0 &&
+                            check->assigned_ip == assigned_ip) {
+                            ip_conflict = 1;
+                            break;
+                        }
+                        check = check->next;
+                    }
+                    if (ip_conflict) {
+                        traceEvent(TRACE_WARNING, "Edge %s static IP %u.%u.%u.%u conflicts with existing edge in community %s",
+                                   macaddr_str(mac_buf, edgeMac),
+                                   (assigned_ip>>24)&0xFF, (assigned_ip>>16)&0xFF,
+                                   (assigned_ip>>8)&0xFF, assigned_ip&0xFF,
+                                   (char*)community);
+                        assigned_ip = 0;
+                    } else {
+                        traceEvent(TRACE_DEBUG, "Edge %s using static IP %u.%u.%u.%u",
+                                   macaddr_str(mac_buf, edgeMac),
+                                   (assigned_ip>>24)&0xFF, (assigned_ip>>16)&0xFF,
+                                   (assigned_ip>>8)&0xFF, assigned_ip&0xFF);
+                    }
+                }
             } else {
                 /* Per-community IP assignment: get or create community stats entry */
                 struct community_stats *cs = get_community_stats(&sss->comm_stats, community, now);
@@ -686,13 +708,38 @@ static int update_edge( n2n_sn_t * sss,
                                macaddr_str(mac_buf, edgeMac), (char*)community);
                 } else {
                     if (cs) {
-                        assigned_ip = cs->next_ip++;
-                        /* Wrap when last octet exceeds 254 (x.x.x.255 is broadcast) */
-                        if ((cs->next_ip & 0xFF) > 254)
-                            cs->next_ip = (cs->next_ip & 0xFFFFFF00) + 2; /* skip .0 and .1 */
-                        /* Wrap entire block back to 10.64.0.2 after 10.64.255.254 */
-                        if (cs->next_ip > 0x0a40FFFE)
-                            cs->next_ip = 0x0a400002;
+                        struct peer_info *check;
+                        int conflict;
+                        int safety = 0;
+                        do {
+                            assigned_ip = cs->next_ip++;
+                            /* Wrap when last octet exceeds 254 (x.x.x.255 is broadcast) */
+                            if ((cs->next_ip & 0xFF) > 254)
+                                cs->next_ip = (cs->next_ip & 0xFFFFFF00) + 2; /* skip .0 and .1 */
+                            /* Wrap entire block back to 10.64.0.2 after 10.64.255.254 */
+                            if (cs->next_ip > 0x0a40FFFE)
+                                cs->next_ip = 0x0a400002;
+
+                            /* Verify no other edge in this community already has this IP.
+                             * Can happen if community_stats was purged while edges remained registered. */
+                            conflict = 0;
+                            check = sss->edges;
+                            while (check) {
+                                if (memcmp(check->community_name, community, sizeof(n2n_community_t)) == 0 &&
+                                    memcmp(check->mac_addr, edgeMac, sizeof(n2n_mac_t)) != 0 &&
+                                    check->assigned_ip == assigned_ip) {
+                                    conflict = 1;
+                                    break;
+                                }
+                                check = check->next;
+                            }
+                            if (++safety > 65534) {
+                                traceEvent(TRACE_WARNING, "IP collision loop safety at %s for %s",
+                                           macaddr_str(mac_buf, edgeMac), (char*)community);
+                                break;
+                            }
+                        } while (conflict);
+
                         /* Store in community's MAC->IP map */
                         struct mac_ip_entry *ne = calloc(1, sizeof(struct mac_ip_entry));
                         if (ne) {
@@ -1741,6 +1788,8 @@ static int process_udp( n2n_sn_t * sss,
         n2n_common_t                    cmn2;
         uint8_t                         ackbuf[N2N_SN_PKTBUF_SIZE];
         size_t                          encx=0;
+
+        memset(&ack, 0, sizeof(ack));
 
         /* Edge requesting registration with us.  */
 
