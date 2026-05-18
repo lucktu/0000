@@ -839,6 +839,32 @@ static int update_edge( n2n_sn_t * sss,
     else
     {
         /* Known */
+
+        /* Update assigned IP if edge requests a different valid IP */
+        if (request_ip && requested_ip != 0) {
+            uint32_t new_ip = ntohl(requested_ip);
+            if (scan->assigned_ip != new_ip) {
+                struct peer_info *check = sss->edges;
+                int ip_conflict = 0;
+                while (check) {
+                    if (memcmp(check->community_name, community, sizeof(n2n_community_t)) == 0 &&
+                        memcmp(check->mac_addr, edgeMac, sizeof(n2n_mac_t)) != 0 &&
+                        check->assigned_ip == new_ip) {
+                        ip_conflict = 1;
+                        break;
+                    }
+                    check = check->next;
+                }
+                if (!ip_conflict) {
+                    scan->assigned_ip = new_ip;
+                    traceEvent(TRACE_INFO, "update_edge reassigned IP for %s to %u.%u.%u.%u",
+                               macaddr_str(mac_buf, edgeMac),
+                               (new_ip >> 24) & 0xFF, (new_ip >> 16) & 0xFF,
+                               (new_ip >> 8) & 0xFF, new_ip & 0xFF);
+                }
+            }
+        }
+
         /* Check if this is an update (community or address changed) */
         int addr_changed = 0;
         if (sender_sock->family == AF_INET6) {
@@ -1795,18 +1821,7 @@ static int process_udp( n2n_sn_t * sss,
 
         sss->stats.last_reg_super=now;
         ++(sss->stats.reg_super);
-        size_t reg_start_idx = idx;
         decode_REGISTER_SUPER( &reg, &cmn, udp_buf, &rem, &idx );
-
-        /* Extract dev_addr (net_addr + net_bitlen) from ntop's n2n_v2 */
-        uint32_t extra_requested_ip = 0;
-        size_t dev_idx = reg_start_idx + N2N_COOKIE_SIZE + N2N_MAC_SIZE;
-        size_t dev_rem = udp_size - dev_idx;
-        size_t dev_pos = dev_idx;
-        if (dev_rem >= 5) {
-            decode_uint32(&extra_requested_ip, udp_buf, &dev_rem, &dev_pos);
-            extra_requested_ip = ntohl(extra_requested_ip);
-        }
 
         cmn2.ttl = N2N_DEFAULT_TTL;
         cmn2.pc = n2n_register_super_ack;
@@ -1842,9 +1857,6 @@ static int process_udp( n2n_sn_t * sss,
                     sock_to_cstr( sockbuf, &(ack.sock) ) );
 
         uint32_t use_requested_ip = reg.dev_addr.net_addr;
-        if (extra_requested_ip != 0) {
-            use_requested_ip = extra_requested_ip;
-        }
         uint8_t use_request_ip = 1; /* always assign IP (auto-assign if net_addr==0) */
 
         const n2n_sock_t *local_sock_ptr = (reg.aflags & N2N_AFLAGS_LOCAL_SOCKET) ? &reg.local_sock : NULL;
