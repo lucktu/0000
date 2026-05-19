@@ -1417,10 +1417,10 @@ static void check_punch_timeouts( n2n_edge_t * eee, time_t now )
             }
         } else if ( scan->punch_start_time != 0 &&
                     !scan->punch_failed &&
-                    (now - scan->punch_start_time) <= 3 &&
+                    (now - scan->punch_start_time) <= 5 &&
                     (now - scan->last_punch_probe) >= 1 )
         {
-            /* Retransmit PROBE every 1s for first 3s */
+            /* Retransmit PROBE every 1s for first 5s */
             int sent_probe = 0;
             
             /* Try IPv4 if available */
@@ -1486,7 +1486,7 @@ static void check_punch_timeouts( n2n_edge_t * eee, time_t now )
                 scan = scan->next;
                 continue;
             }
-            if ( (now - scan->punch_reset_time) > 300 )
+            if ( (now - scan->punch_reset_time) > 40 )
             {
                 scan->punch_retry_count++;
                 if ( scan->punch_retry_count >= 3 ) {
