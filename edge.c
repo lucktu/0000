@@ -218,6 +218,19 @@ static int supernode2addr(n2n_sock_t * sn, int af, const n2n_sn_name_t addr);
 static void send_packet2net(n2n_edge_t * eee,
                 uint8_t *decrypted_msg, size_t len);
 
+static void trim_config_line_end(char *line) {
+    size_t len;
+
+    if (!line) return;
+
+    len = strlen(line);
+    while (len > 0) {
+        char ch = line[len - 1];
+        if (ch != '\n' && ch != '\r' && ch != ' ' && ch != '\t') break;
+        line[--len] = '\0';
+    }
+}
+
 /* ************************************** */
 
 static int readConfFile(const char * filename, char * const linebuffer) {
@@ -248,11 +261,7 @@ static int readConfFile(const char * filename, char * const linebuffer) {
         p = strchr(buffer, '#');
         if (p) *p ='\0';
 
-        p = strchr(buffer, '\n');
-        if (p) *p ='\0';
-
-        p = strchr(buffer, '\r');
-        if (p) *p ='\0';
+        trim_config_line_end(buffer);
 
         if (strlen(buffer) == 0) continue;
 
@@ -269,10 +278,6 @@ static int readConfFile(const char * filename, char * const linebuffer) {
         }
 
         size_t buf_len = strlen(buffer);
-        while(buf_len > 0 && (buffer[buf_len-1] == ' ' || buffer[buf_len-1] == '\r')) {
-            buffer[buf_len-1] = '\0';
-            buf_len--;
-        }
 
         if (strchr(buffer, '@')) {
             traceEvent(TRACE_ERROR, "@file in file nesting is not supported");

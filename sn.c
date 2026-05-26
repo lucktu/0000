@@ -282,6 +282,20 @@ static void free_rate_limit_rules(struct rate_limit_rule **head)
     *head = NULL;
 }
 
+static void trim_config_line_end(char *line)
+{
+    size_t len;
+
+    if (!line) return;
+
+    len = strlen(line);
+    while (len > 0) {
+        char ch = line[len - 1];
+        if (ch != '\n' && ch != '\r' && ch != ' ' && ch != '\t') break;
+        line[--len] = '\0';
+    }
+}
+
 /* Parse -L config file */
 static void parse_rate_limit_config(const char *path,
                                      int *enabled,
@@ -319,7 +333,8 @@ static void parse_rate_limit_config(const char *path,
     struct rate_limit_rule *tail = NULL;
     char line[256];
     while (fgets(line, sizeof(line), fp)) {
-        if (line[0] == '#' || line[0] == '\n') continue;
+        trim_config_line_end(line);
+        if (line[0] == '\0' || line[0] == '#') continue;
         char kw[64], val[64];
         if (sscanf(line, "%63s %63s", kw, val) == 2 &&
             strcmp(kw, "enabled") == 0) {

@@ -10,6 +10,19 @@
 #include <time.h>
 #include <string.h>
 
+static void trim_config_line_end(char *line) {
+    size_t len;
+
+    if (!line) return;
+
+    len = strlen(line);
+    while (len > 0) {
+        char ch = line[len - 1];
+        if (ch != '\n' && ch != '\r' && ch != ' ' && ch != '\t') break;
+        line[--len] = '\0';
+    }
+}
+
 
 #ifdef WIN32
 char *strsep( char **ppsz_string, const char *psz_delimiters )
@@ -156,6 +169,8 @@ int n2n_read_keyfile( n2n_cipherspec_t * specs,     /* fill out this array of ci
             n2n_cipherspec_t * k = &(specs[idx]);
             char *_r = fgets( line, N2N_KEYFILE_LINESIZE, fp ); (void)_r;
             ++lineNum;
+
+            trim_config_line_end(line);
 
             if ( strlen(line) > 1 )
             {
