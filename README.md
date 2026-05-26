@@ -134,3 +134,5 @@ a console, messages are logged in the Windows Event Log.
 The commandline parameters are stored in `HKLM:\SOFTWARE\n2n\edge\Arguments` and `HKLM:\SOFTWARE\n2n\supernode\Arguments`.
 They can be modified using `regedit` or an administrative PowerShell Console. Both entries are *MulitStrings*, so that parameters
 containing spaces can properly supported but if this is not needed the registry entries can be of type *String* too.
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lucktu/n2n6)
