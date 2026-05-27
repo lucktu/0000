@@ -805,6 +805,7 @@ static ssize_t sendto_sock( SOCKET fd, const void * buf, size_t len, const n2n_s
     struct sockaddr_in6 peer_addr;
     ssize_t sent;
     socklen_t addr_len;
+    n2n_sock_str_t sockbuf;
 
     fill_sockaddr( (struct sockaddr*) &peer_addr, sizeof(peer_addr), dest );
     addr_len = (dest->family == AF_INET6) ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
@@ -820,11 +821,13 @@ static ssize_t sendto_sock( SOCKET fd, const void * buf, size_t len, const n2n_s
         /* 10047 = WSAEAFNOSUPPORT: IPv4 socket sending to IPv6 address - silent */
         if ( error != 10014 && error != 10047 ) {
             const char *message = n2n_win32_format_error(error, fallback, sizeof(fallback));
-            traceEvent( TRACE_ERROR, "sendto failed (%d): %s", error, message );
+            traceEvent( TRACE_ERROR, "sendto failed (%d) to %s: %s", error,
+                        sock_to_cstr(sockbuf, dest), message );
         }
 #else
         char * c = strerror(errno);
-        traceEvent( TRACE_DEBUG, "sendto failed (%d) %s", errno, c );
+        traceEvent( TRACE_DEBUG, "sendto failed (%d) to %s: %s", errno,
+                    sock_to_cstr(sockbuf, dest), c );
 #endif
     }
     else
