@@ -6,60 +6,69 @@
 #include "n2n_win32.h"
 
 #include <stdio.h>
-#include <wchar.h>
-
 #ifdef _WIN32
 
-static void trim_trailing_newlines(wchar_t *message) {
-    size_t len;
-
-    if (!message) {
-        return;
-    }
-
-    len = wcslen(message);
-    while (len > 0 && (message[len - 1] == L'\r' || message[len - 1] == L'\n' || message[len - 1] == L' ' || message[len - 1] == L'\t')) {
-        message[--len] = L'\0';
-    }
-}
-
-char *n2n_win32_format_error_inplace(DWORD error_code, wchar_t **system_message, char *fallback, size_t fallback_len) {
-    wchar_t *message = NULL;
-    int converted;
-
-    if (system_message) {
-        *system_message = NULL;
-    }
-
-    if (fallback && fallback_len > 0) {
-        snprintf(fallback, fallback_len, "Windows error %lu (no system message available)", (unsigned long)error_code);
-        fallback[fallback_len - 1] = '\0';
-    }
-
-    FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                   NULL,
-                   error_code,
-                   MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                   (LPWSTR)&message,
-                   0,
-                   NULL);
-
-    if (message && message[0]) {
-        trim_trailing_newlines(message);
-        if (message[0]) {
-            converted = WideCharToMultiByte(CP_UTF8, 0, message, -1, fallback, (int)fallback_len, NULL, NULL);
-            if (converted > 0) {
+const char *n2n_win32_format_error(DWORD error_code, char *fallback, size_t fallback_len) {
+    switch (error_code) {
+        case WSAEINTR: return "Interrupted function call";
+        case WSAEBADF: return "Bad file descriptor";
+        case WSAEACCES: return "Permission denied";
+        case WSAEFAULT: return "Bad address";
+        case WSAEINVAL: return "Invalid argument";
+        case WSAEMFILE: return "Too many open files";
+        case WSAEWOULDBLOCK: return "Resource temporarily unavailable";
+        case WSAEINPROGRESS: return "Operation now in progress";
+        case WSAEALREADY: return "Operation already in progress";
+        case WSAENOTSOCK: return "Socket operation on non-socket";
+        case WSAEDESTADDRREQ: return "Destination address required";
+        case WSAEMSGSIZE: return "Message too long";
+        case WSAEPROTOTYPE: return "Protocol wrong type for socket";
+        case WSAENOPROTOOPT: return "Bad protocol option";
+        case WSAEPROTONOSUPPORT: return "Protocol not supported";
+        case WSAESOCKTNOSUPPORT: return "Socket type not supported";
+        case WSAEOPNOTSUPP: return "Operation not supported";
+        case WSAEPFNOSUPPORT: return "Protocol family not supported";
+        case WSAEAFNOSUPPORT: return "Address family not supported by protocol family";
+        case WSAEADDRINUSE: return "Address already in use";
+        case WSAEADDRNOTAVAIL: return "Cannot assign requested address";
+        case WSAENETDOWN: return "Network is down";
+        case WSAENETUNREACH: return "Network is unreachable";
+        case WSAENETRESET: return "Network dropped connection on reset";
+        case WSAECONNABORTED: return "Software caused connection abort";
+        case WSAECONNRESET: return "Connection reset by peer";
+        case WSAENOBUFS: return "No buffer space available";
+        case WSAEISCONN: return "Socket is already connected";
+        case WSAENOTCONN: return "Socket is not connected";
+        case WSAESHUTDOWN: return "Cannot send after socket shutdown";
+        case WSAETOOMANYREFS: return "Too many references";
+        case WSAETIMEDOUT: return "Connection timed out";
+        case WSAECONNREFUSED: return "Connection refused";
+        case WSAELOOP: return "Too many symbolic links";
+        case WSAENAMETOOLONG: return "Name too long";
+        case WSAEHOSTDOWN: return "Host is down";
+        case WSAEHOSTUNREACH: return "No route to host";
+        case WSAENOTEMPTY: return "Directory not empty";
+        case WSAEPROCLIM: return "Too many processes";
+        case WSAEUSERS: return "User quota exceeded";
+        case WSAEDQUOT: return "Disk quota exceeded";
+        case WSAESTALE: return "Stale file handle reference";
+        case WSAEREMOTE: return "Item is remote";
+        case WSASYSNOTREADY: return "Network subsystem is unavailable";
+        case WSAVERNOTSUPPORTED: return "Winsock version not supported";
+        case WSANOTINITIALISED: return "Successful WSAStartup not yet performed";
+        case WSAEDISCON: return "Graceful shutdown in progress";
+        case WSAHOST_NOT_FOUND: return "Host not found";
+        case WSATRY_AGAIN: return "Non-authoritative host not found";
+        case WSANO_RECOVERY: return "This is a non-recoverable error";
+        case WSANO_DATA: return "Valid name, no data record of requested type";
+        default:
+            if (fallback && fallback_len > 0) {
+                snprintf(fallback, fallback_len, "Windows error %lu", (unsigned long)error_code);
                 fallback[fallback_len - 1] = '\0';
+                return fallback;
             }
-            if (system_message) {
-                *system_message = message;
-            }
-            return fallback;
-        }
-        LocalFree(message);
+            return "Windows error";
     }
-
-    return fallback;
 }
 
 /* 1500 bytes payload + 14 bytes ethernet header + 4 bytes VLAN tag */
@@ -74,12 +83,8 @@ void initWin32() {
         /* Tell the user that we could not find a usable */
         /* WinSock DLL.                                  */
         char fallback[256];
-        wchar_t *system_error = NULL;
-        const char *error = n2n_win32_format_error_inplace(GetLastError(), &system_error, fallback, sizeof(fallback));
+        const char *error = n2n_win32_format_error(GetLastError(), fallback, sizeof(fallback));
         traceEvent(TRACE_ERROR, "Unable to initialise Winsock 2.x: %s", error);
-        if (system_error) {
-            LocalFree(system_error);
-        }
         exit(-1);
     }
 }

@@ -816,15 +816,11 @@ static ssize_t sendto_sock( SOCKET fd, const void * buf, size_t len, const n2n_s
 #ifdef _WIN32
         int error = WSAGetLastError();
         char fallback[256];
-        wchar_t *system_error = NULL;
         /* 10014 = WSAEFAULT: IPv6 socket sending to IPv4 address - silent */
         /* 10047 = WSAEAFNOSUPPORT: IPv4 socket sending to IPv6 address - silent */
         if ( error != 10014 && error != 10047 ) {
-            const char *message = n2n_win32_format_error_inplace(error, &system_error, fallback, sizeof(fallback));
+            const char *message = n2n_win32_format_error(error, fallback, sizeof(fallback));
             traceEvent( TRACE_ERROR, "sendto failed (%d): %s", error, message );
-            if (system_error) {
-                LocalFree(system_error);
-            }
         }
 #else
         char * c = strerror(errno);
@@ -2707,12 +2703,8 @@ static void readFromMgmtSocket(n2n_edge_t *eee, int *keep_running) {
 #ifdef _WIN32
         int err = WSAGetLastError();
         char fallback[256];
-        wchar_t *system_error = NULL;
-        const char *message = n2n_win32_format_error_inplace(err, &system_error, fallback, sizeof(fallback));
+        const char *message = n2n_win32_format_error(err, fallback, sizeof(fallback));
         traceEvent( TRACE_ERROR, "mgmt recvfrom failed (%d): %s", err, message );
-        if (system_error) {
-            LocalFree(system_error);
-        }
 #else
         traceEvent(TRACE_ERROR, "mgmt recvfrom failed with %s", strerror(errno));
 #endif
@@ -2964,12 +2956,8 @@ static void readFromIPSocket( n2n_edge_t * eee, SOCKET fd )
         int err = WSAGetLastError();
         if (err != WSAEWOULDBLOCK) {
             char fallback[256];
-            wchar_t *system_error = NULL;
-            const char *message = n2n_win32_format_error_inplace(err, &system_error, fallback, sizeof(fallback));
+            const char *message = n2n_win32_format_error(err, fallback, sizeof(fallback));
             traceEvent( TRACE_DEBUG, "recvfrom failed [%d]: %s", err, message );
-            if (system_error) {
-                LocalFree(system_error);
-            }
         }
 #else
         traceEvent(TRACE_DEBUG, "recvfrom failed with %s", strerror(errno) );
