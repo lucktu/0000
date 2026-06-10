@@ -2188,7 +2188,7 @@ static int send_PACKET( n2n_edge_t * eee,
     else ++(eee->tx_sup);
     PEERS_UNLOCK(eee);
 
-    traceEvent( TRACE_INFO, "send_PACKET to %s", sock_to_cstr( sockbuf, &destination ) );
+    traceEvent( TRACE_DEBUG, "send_PACKET to %s", sock_to_cstr( sockbuf, &destination ) );
 
     sendto_sock( sock_for_dest(eee, &destination), pktbuf, pktlen, &destination );
 
@@ -2404,7 +2404,7 @@ retry2:
     else
     {
         const uint8_t * mac = eth_pkt;
-        traceEvent(TRACE_INFO, "### Rx TAP packet (%4d) for %s",
+        traceEvent(TRACE_DEBUG, "### Rx TAP packet (%4d) for %s",
                    (signed int)len, macaddr_str(mac_buf, mac) );
 
         /* don't filter ip6_discovery this is needed for ip6 connectivity */
@@ -2640,7 +2640,7 @@ static int handle_PACKET( n2n_edge_t * eee,
             }
 
             data_sent_len = tuntap_write(&(eee->device), eth_payload, eth_size);
-            traceEvent(TRACE_INFO, "handle_PACKET: tuntap_write done, len=%d", (signed int)data_sent_len);
+            traceEvent(TRACE_DEBUG, "handle_PACKET: tuntap_write done, len=%d", (signed int)data_sent_len);
 
             if (data_sent_len == eth_size)
             {
@@ -3017,7 +3017,7 @@ static void readFromIPSocket( n2n_edge_t * eee, SOCKET fd )
      * hop as sender. */
     orig_sender=&sender;
 
-    traceEvent(TRACE_INFO, "### Rx N2N UDP (%d) from %s",
+    traceEvent(TRACE_DEBUG, "### Rx N2N UDP (%d) from %s",
                (signed int) recvlen, sock_to_cstr(sockbuf1, &sender) );
 
     /* Check for bypass packet (has its own magic header, not n2n format).
@@ -3107,12 +3107,12 @@ process_n2n_packet:
                 orig_sender = &(pkt.sock);
             }
 
-            traceEvent(TRACE_INFO, "Rx PACKET from %s (%s)",
+            traceEvent(TRACE_DEBUG, "Rx PACKET from %s (%s)",
                        sock_to_cstr(sockbuf1, &sender),
                        sock_to_cstr(sockbuf2, orig_sender) );
 
             handle_PACKET( eee, &cmn, &pkt, orig_sender, udp_buf + idx, recvlen - idx );
-            traceEvent(TRACE_INFO, "handle_PACKET returned");
+            traceEvent(TRACE_DEBUG, "handle_PACKET returned");
         }
         else if(msg_type == MSG_TYPE_REGISTER)
         {
