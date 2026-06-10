@@ -2398,29 +2398,41 @@ retry2:
             goto retry;
         }
 #else
+        if (len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return; /* no more frames available */
         traceEvent(TRACE_WARNING, "read()=%d [%d/%s]", (signed int)len, errno, strerror(errno));
 #endif
     }
     else
-    {
-        const uint8_t * mac = eth_pkt;
-        traceEvent(TRACE_DEBUG, "### Rx TAP packet (%4d) for %s",
-                   (signed int)len, macaddr_str(mac_buf, mac) );
+        {
+            const uint8_t * mac = eth_pkt;
+            traceEvent(TRACE_DEBUG, "### Rx TAP packet (%4d) for %s",
+                       (signed int)len, macaddr_str(mac_buf, mac) );
 
-        /* don't filter ip6_discovery this is needed for ip6 connectivity */
-        if ( eee->drop_multicast && (
-             is_ethMulticast( eth_pkt, len) /* || is_ip6_discovery( eth_pkt, len ) */
-            ) )
-        {
-            traceEvent(TRACE_DEBUG, "Dropping multicast");
+            /* don't filter ip6_discovery this is needed for ip6 connectivity */
+            if ( eee->drop_multicast && (
+                 is_ethMulticast( eth_pkt, len) /* || is_ip6_discovery( eth_pkt, len ) */
+                ) )
+            {
+                traceEvent(TRACE_DEBUG, "Dropping multicast");
+            }
+            else
+            {
+                /* Try bypass first (ICMP to bypass-active peers) */
+                if (!bypass_has_peers(eee->bp) || bypass_tap_forward(eee->bp, eth_pkt, len) == 0)
+                    send_packet2net(eee, eth_pkt, len);
+            }
+
+            /* Drain more frames (TAP is non-blocking now) */
+            for (int _di = 0; _di < 7; _di++) {
+                ssize_t dlen = tuntap_read(&(eee->device), eth_pkt, N2N_PKT_BUF_SIZE);
+                if (dlen <= 0) break;
+                traceEvent(TRACE_DEBUG, "### Rx TAP packet (drain %d) for %s",
+                           (signed int)dlen, macaddr_str(mac_buf, eth_pkt));
+                if (!bypass_has_peers(eee->bp) || bypass_tap_forward(eee->bp, eth_pkt, dlen) == 0)
+                    send_packet2net(eee, eth_pkt, dlen);
+            }
         }
-        else
-        {
-            /* Try bypass first (ICMP to bypass-active peers) */
-            if (!bypass_has_peers(eee->bp) || bypass_tap_forward(eee->bp, eth_pkt, len) == 0)
-                send_packet2net(eee, eth_pkt, len);
-        }
-    }
 }
 
 /** A PACKET has arrived containing an encapsulated ethernet datagram - usually

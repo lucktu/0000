@@ -369,7 +369,7 @@ int tuntap_open(tuntap_dev *device, struct tuntap_config* config) {
         }
     }
 
-    device->fd = open(tuntap_device, O_RDWR | O_CLOEXEC);
+    device->fd = open(tuntap_device, O_RDWR | O_NONBLOCK | O_CLOEXEC);
     if(device->fd < 0) {
         printf("ERROR: ioctl() [%s][%d]\n", strerror(errno), errno);
         return -1;
