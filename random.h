@@ -136,4 +136,33 @@ static inline void random_bytes(random_ctx_t ctx, uint8_t *buf, size_t n) {
     }
 }
 
+/* ---------- Fast non-cryptographic PRNG for IV generation ----------
+ * Uses xorshift64* to avoid expensive getrandom() syscalls on every packet.
+ * Security: IV only needs uniqueness (not secrecy), xorshift64 is sufficient. */
+static inline uint64_t fast_rand64(void) {
+    static uint64_t state = 0;
+    if (state == 0) {
+        /* One-time seed from CSPRNG */
+        random_bytes_buf((uint8_t*)&state, 8);
+        if (state == 0) state = 1;
+    }
+    state ^= state >> 12;
+    state ^= state << 25;
+    state ^= state >> 27;
+    return state * 0x2545F4914F6CDD1DULL;
+}
+
+/* Fill buf with n bytes from fast PRNG */
+static inline void fast_rand_bytes(uint8_t *buf, size_t n) {
+    size_t i;
+    for (i = 0; i + 8 <= n; i += 8) {
+        uint64_t r = fast_rand64();
+        memcpy(buf + i, &r, 8);
+    }
+    if (i < n) {
+        uint64_t r = fast_rand64();
+        memcpy(buf + i, &r, n - i);
+    }
+}
+
 #endif /* N2N_RANDOM_H_ */

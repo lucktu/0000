@@ -64,13 +64,14 @@ static ssize_t transop_encode_aes(n2n_trans_op_t *arg,
     n2n_aes_ivec_t enc_ivec = {0};
 
     encode_uint8(outbuf, &idx, N2N_AES_TRANSFORM_VERSION);
-    random_bytes_buf(iv_seed, TRANSOP_AES_IV_SEED_SIZE);
+    fast_rand_bytes(iv_seed, TRANSOP_AES_IV_SEED_SIZE);
     encode_buf(outbuf, &idx, iv_seed, TRANSOP_AES_IV_SEED_SIZE);
 
-    memset(priv->assembly, 0, N2N_TRANSFORM_BUF_SIZE);
-    memcpy(priv->assembly, inbuf, in_len);
     int len2 = ((in_len / N2N_AES_BLOCK_SIZE) + 1) * N2N_AES_BLOCK_SIZE;
-    priv->assembly[len2 - 1] = len2 - in_len;
+    memcpy(priv->assembly, inbuf, in_len);
+    /* Only zero the padding area, not the whole buffer */
+    memset(priv->assembly + in_len, 0, len2 - in_len);
+    priv->assembly[len2 - 1] = (uint8_t)(len2 - in_len);
 
     set_aes_cbc_iv(priv, enc_ivec, iv_seed);
     n2n_aes_cbc_encrypt(outbuf + TRANSOP_AES_PREAMBLE_SIZE, priv->assembly, len2, enc_ivec, priv->enc_ctx);

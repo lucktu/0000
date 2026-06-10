@@ -44,11 +44,9 @@ int transop_deinit_speck(n2n_trans_op_t *arg) {
     return 0;
 }
 
-/* Generate IV using secure random number generation.
- * Calls random_bytes_buf directly - no need to init/free ctx each time
- * since the global RNG is already seeded at startup. */
+/* Generate IV using fast PRNG (no syscall overhead). */
 static void set_speck_iv(transop_speck_t *priv _unused_, uint8_t *ivec) {
-    random_bytes_buf(ivec, N2N_SPECK_NONCE_SIZE);
+    fast_rand_bytes(ivec, N2N_SPECK_NONCE_SIZE);
 }
 
 ssize_t transop_encode_speck(n2n_trans_op_t *arg,

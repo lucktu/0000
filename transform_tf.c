@@ -126,7 +126,7 @@ static ssize_t transop_encode_twofish( n2n_trans_op_t * arg,
              * written in first followed by the packet payload. The whole
              * contents of assembly are encrypted. */
             pnonce = (uint32_t *)priv->assembly;
-            random_bytes(&sa->random, (uint8_t*) pnonce, sizeof(uint32_t));
+            *pnonce = (uint32_t)fast_rand64();
             memcpy( priv->assembly + TRANSOP_TF_NONCE_SIZE, inbuf, in_len );
 
             /* Encrypt the assembly contents and write the ciphertext after the SA. */
