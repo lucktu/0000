@@ -2185,7 +2185,11 @@ static int send_PACKET( n2n_edge_t * eee,
     PEERS_LOCK(eee);
     dest = find_peer_destination(eee, dstMac, &destination);
     if (dest) { ++(eee->tx_p2p); eee->p2p_tx_bytes += pktlen; }
-    else { ++(eee->tx_sup); eee->super_tx_bytes += pktlen; }
+    else {
+        ++(eee->tx_sup); eee->super_tx_bytes += pktlen;
+        /* Relay via supernode: fallback destination when no P2P path exists */
+        destination = eee->supernode;
+    }
     PEERS_UNLOCK(eee);
 
     traceEvent( TRACE_DEBUG, "send_PACKET to %s", sock_to_cstr( sockbuf, &destination ) );
@@ -2472,10 +2476,30 @@ static int handle_PACKET( n2n_edge_t * eee,
     PEERS_LOCK(eee);
     struct peer_info *scan = find_peer_by_mac(eee->known_peers, pkt->srcMac);
     if (NULL == scan) {
-        /* Principle 3: receiving data does NOT trigger P2P setup.
-         * Direct connection is initiated only when WE have data to send
-         * (in send_packet2net -> send_PACKET). This prevents unnecessary
-         * P2P attempts triggered by broadcasts, ARPs, or other incidental traffic. */
+        scan = find_peer_by_mac(eee->pending_peers, pkt->srcMac);
+    }
+    if (NULL == scan) {
+        if (from_supernode) {
+            /* Unknown peer sent via relay. Save its address so we can
+             * contact it via relay in return. */
+            macstr_t mac_buf;
+            struct peer_info *p = (struct peer_info *)calloc(1, sizeof(struct peer_info));
+            if (p) {
+                memcpy(p->mac_addr, pkt->srcMac, N2N_MAC_SIZE);
+                if (orig_sender->family == AF_INET6) {
+                    p->sock6 = *orig_sender;
+                    p->sock = *orig_sender;
+                } else {
+                    p->sock = *orig_sender;
+                }
+                p->sockets[0] = *orig_sender;
+                p->num_sockets = 1;
+                p->last_seen = now;
+                peer_list_add(&eee->pending_peers, p);
+                traceEvent(TRACE_DEBUG, "handle_PACKET: saved relayed peer %s",
+                           macaddr_str(mac_buf, pkt->srcMac));
+            }
+        }
     } else if (!from_supernode) {
         /* P2P packet: refresh direct communication timestamp */
         scan->direct_seen = now;
