@@ -602,7 +602,7 @@ static int transop_enum_to_index( n2n_transform_t id )
 static int n2n_tick_transop( n2n_edge_t * eee, time_t now )
 {
     /* Tick all transops for maintenance only.
-     * tx_transop_idx is set by -B option and must not be overridden here. */
+     * tx_transop_idx is set by -A option and must not be overridden here. */
     (eee->transop[N2N_TRANSOP_NULL_IDX].tick)( &(eee->transop[N2N_TRANSOP_NULL_IDX]), now );
     (eee->transop[N2N_TRANSOP_TF_IDX].tick)( &(eee->transop[N2N_TRANSOP_TF_IDX]), now );
     (eee->transop[N2N_TRANSOP_AESCBC_IDX].tick)( &(eee->transop[N2N_TRANSOP_AESCBC_IDX]), now );
@@ -654,34 +654,34 @@ static void help() {
     printf("\n");
 
     printf("Usage: edge [config_file] <options>\n");
-    printf("or: edge -a <tun IP address> -c <community> -k <encrypt key> -B <mode> -l <supernode host:port>\n");
+    printf("or: edge -a <tun IP address> -c <community> -k <encrypt key> -A <mode> -l <supernode host:port>\n");
     printf("or: edge -c <community> (default: -d n2nx -a 10.64.0.x -l ouno.eu.org:10084; no password, not secure, not recommended)\n");
     printf("\n");
 
-#if N2N_CAN_NAME_IFACE && !defined(_WIN32)
-    printf("-d <tun device>          | tun device name\n");
-#elif N2N_CAN_NAME_IFACE && defined(_WIN32)
-    printf("-d <tun device>          | tun device name (optional)\n");
-#endif
-    printf("-a <mode:IPv4/prefixlen> | Set interface IPv4 address. For DHCP use '-r -a dhcp:0.0.0.0/0'\n");
+    printf("-a <addr>[/<prefixlen>]  | Set interface IP address (IPv4 or IPv6, auto-detected).\n");
+    printf("                         : For DHCP use '-r -a dhcp:0.0.0.0/0'\n");
     printf("                         : If not specified, auto-assigns 10.64.0.x from supernode\n");
-    printf("-A <IPv6>/<prefixlen>    | Set interface IPv6 address, only supported if IPv4 set to 'static'\n");
-    printf("-c <community>           | n2n community name the edge belongs to.\n");
-    printf("-B <mode>                | Encryption:");
-    printf(" B1 = disable, B2 = twofish(-k)");
+    printf("-A <mode>                | Encryption:");
+    printf(" A1 = disable, A2 = twofish(-k)");
     #ifdef N2N_HAVE_AES
-    printf(", B3 = AES-CBC(-k)");
+    printf(", A3 = AES-CBC(-k)");
     #endif
     #ifdef N2N_HAVE_CC20
-    printf(", B4 = ChaCha20(-k)");
+    printf(", A4 = ChaCha20(-k)");
     #endif
     printf("\n");
-    printf("                         : B5 = Speck(-k). '-B1' can also be used as '-B 1' (default: twofish)\n");
+    printf("                         : A5 = Speck(-k). '-A1' can also be used as '-A 1' (default: twofish)\n");
+    printf("-c <community>           | n2n community name the edge belongs to.\n");
     printf("-k <encrypt key>         | Encryption key (ASCII, max 32) - also N2N_KEY=<encrypt key>.\n");
     printf("-l <supernode host:port> | Supernode address Formats (default: ouno.eu.org:10084):\n");
     printf("                         : host:port  - Direct address (e.g. ouno.eu.org:10084)\n");
     printf("                         : host       - Query DNS TXT record for address (e.g. n2n.example.com)\n");
     printf("-4/-6                    | Resolve supernode DNS name as IPv4 or IPv6 (default: auto)\n");
+#if N2N_CAN_NAME_IFACE && !defined(_WIN32)
+    printf("-d <tun device>          | tun device name\n");
+#elif N2N_CAN_NAME_IFACE && defined(_WIN32)
+    printf("-d <tun device>          | tun device name (optional)\n");
+#endif
     printf("-p <local port>          | Fixed local UDP port.\n");
 #ifndef _WIN32
     printf("-u <UID>                 | User ID (numeric) to use when privileges are dropped.\n");
@@ -2184,8 +2184,8 @@ static int send_PACKET( n2n_edge_t * eee,
 
     PEERS_LOCK(eee);
     dest = find_peer_destination(eee, dstMac, &destination);
-    if (dest) ++(eee->tx_p2p);
-    else ++(eee->tx_sup);
+    if (dest) { ++(eee->tx_p2p); eee->p2p_tx_bytes += pktlen; }
+    else { ++(eee->tx_sup); eee->super_tx_bytes += pktlen; }
     PEERS_UNLOCK(eee);
 
     traceEvent( TRACE_DEBUG, "send_PACKET to %s", sock_to_cstr( sockbuf, &destination ) );
@@ -2460,9 +2460,11 @@ static int handle_PACKET( n2n_edge_t * eee,
 
     if (from_supernode) {
         ++(eee->rx_sup);
+        eee->super_rx_bytes += psize;
         eee->last_sup=now;
     } else {
         ++(eee->rx_p2p);
+        eee->p2p_rx_bytes += psize;
         eee->last_p2p=now;
     }
 
@@ -2667,6 +2669,33 @@ static int handle_PACKET( n2n_edge_t * eee,
     }
 
     return retval;
+}
+
+/** Format bytes with auto-scaled unit: B, K, M, G. */
+static void fmt_bytes(char *buf, size_t bufsize, size_t bytes) {
+    if (bytes == 0) {
+        snprintf(buf, bufsize, "0");
+    } else if (bytes < 1024) {
+        snprintf(buf, bufsize, "%zuB", bytes);
+    } else if (bytes < 1024 * 1024) {
+        double k = (double)bytes / 1024.0;
+        if (k < 10.0)
+            snprintf(buf, bufsize, "%.1fK", k);
+        else
+            snprintf(buf, bufsize, "%.0fK", k);
+    } else if (bytes < (size_t)1024 * 1024 * 1024) {
+        double m = (double)bytes / (1024.0 * 1024.0);
+        if (m < 10.0)
+            snprintf(buf, bufsize, "%.1fM", m);
+        else
+            snprintf(buf, bufsize, "%.0fM", m);
+    } else {
+        double g = (double)bytes / (1024.0 * 1024.0 * 1024.0);
+        if (g < 10.0)
+            snprintf(buf, bufsize, "%.1fG", g);
+        else
+            snprintf(buf, bufsize, "%.0fG", g);
+    }
 }
 
 /** Read a datagram from the management UDP socket and take appropriate
@@ -2933,33 +2962,52 @@ static void readFromMgmtSocket(n2n_edge_t *eee, int *keep_running) {
         if (eee->last_p2p) snprintf(p2p_str, sizeof(p2p_str), "%lus ago", (unsigned long)(now - eee->last_p2p));
         else strcpy(p2p_str, "never");
         msg_len = snprintf((char*)udp_buf, N2N_PKT_BUF_SIZE,
-                           "%s up %dd_%02dh_%02dm | pend/known_peers %u/%u | last_super/p2p %s/%s\n",
+                           "%s up %dd_%02dh_%02dm | pend/known_peers %u/%u | last_super/p2p %s/%s",
                            date_str, days, hours, mins,
                            (unsigned int)peer_list_size(eee->pending_peers),
                            (unsigned int)peer_list_size(eee->known_peers),
                            sup_str, p2p_str);
+        if (eee->bp && eee->bp->enabled && !eee->bp->user_disabled) {
+            msg_len += snprintf((char*)udp_buf + msg_len, N2N_PKT_BUF_SIZE - (size_t)msg_len,
+                                " | bp on %u", (unsigned int)eee->bp->proxy_port);
+        }
+        msg_len += snprintf((char*)udp_buf + msg_len, N2N_PKT_BUF_SIZE - (size_t)msg_len,
+                            "\n");
     }
     sendto(eee->mgmt_sock, udp_buf, msg_len, 0/*flags*/,
            (struct sockaddr*) &sender_sock, i);
 
     {
-        msg_len = snprintf((char*)udp_buf, N2N_PKT_BUF_SIZE,
-                           "Transop %u/%u | super %u/%u | p2p %u/%u",
-                           (unsigned int)eee->transop[N2N_TRANSOP_NULL_IDX].tx_cnt,
-                           (unsigned int)eee->transop[N2N_TRANSOP_NULL_IDX].rx_cnt,
-                           (unsigned int)eee->tx_sup,
-                           (unsigned int)eee->rx_sup,
-                           (unsigned int)eee->tx_p2p,
-                           (unsigned int)eee->rx_p2p);
-        /* Append bypass info if available */
-        if (eee->bp) {
-            char bp_buf[128];
-            bypass_mgmt_oneline(eee->bp, bp_buf, sizeof(bp_buf));
-            msg_len += snprintf((char*)udp_buf + msg_len, N2N_PKT_BUF_SIZE - (size_t)msg_len,
-                                " | %s", bp_buf);
+        size_t total_tx = eee->super_tx_bytes + eee->p2p_tx_bytes;
+        size_t total_rx = eee->super_rx_bytes + eee->p2p_rx_bytes;
+        char ft[10], fr[10], fst[10], fsr[10], fpt[10], fpr[10];
+        if (eee->bp && eee->bp->enabled && !eee->bp->user_disabled) {
+            total_tx += eee->bp->bp_tx_bytes;
+            total_rx += eee->bp->bp_rx_bytes;
+            char fbt[10], fbr[10];
+            fmt_bytes(ft, sizeof(ft), total_tx);
+            fmt_bytes(fr, sizeof(fr), total_rx);
+            fmt_bytes(fst, sizeof(fst), eee->super_tx_bytes);
+            fmt_bytes(fsr, sizeof(fsr), eee->super_rx_bytes);
+            fmt_bytes(fpt, sizeof(fpt), eee->p2p_tx_bytes);
+            fmt_bytes(fpr, sizeof(fpr), eee->p2p_rx_bytes);
+            fmt_bytes(fbt, sizeof(fbt), eee->bp->bp_tx_bytes);
+            fmt_bytes(fbr, sizeof(fbr), eee->bp->bp_rx_bytes);
+            msg_len = snprintf((char*)udp_buf, N2N_PKT_BUF_SIZE,
+                               "Tx/rx: total %s/%s | super %s/%s | p2p %s/%s"
+                               " | bp %s/%s\n",
+                               ft, fr, fst, fsr, fpt, fpr, fbt, fbr);
+        } else {
+            fmt_bytes(ft, sizeof(ft), total_tx);
+            fmt_bytes(fr, sizeof(fr), total_rx);
+            fmt_bytes(fst, sizeof(fst), eee->super_tx_bytes);
+            fmt_bytes(fsr, sizeof(fsr), eee->super_rx_bytes);
+            fmt_bytes(fpt, sizeof(fpt), eee->p2p_tx_bytes);
+            fmt_bytes(fpr, sizeof(fpr), eee->p2p_rx_bytes);
+            msg_len = snprintf((char*)udp_buf, N2N_PKT_BUF_SIZE,
+                               "Tx/rx: total %s/%s | super %s/%s | p2p %s/%s\n",
+                               ft, fr, fst, fsr, fpt, fpr);
         }
-        msg_len += snprintf((char*)udp_buf + msg_len, N2N_PKT_BUF_SIZE - (size_t)msg_len,
-                            "\n");
     }
     sendto(eee->mgmt_sock, udp_buf, msg_len, 0/*flags*/,
            (struct sockaddr*) &sender_sock, i);
@@ -4521,7 +4569,7 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
     optarg = NULL;
     while((opt = getopt_long(argc,
         argv,
-        "46K:k:a:A:bc:Eu:g:m:M:d:l:p:fvhrt:R:B:x::", long_options, NULL
+        "46K:k:a:bc:Eu:g:m:M:d:l:p:fvhrt:R:A:x::", long_options, NULL
     )) != EOF) {
         switch (opt) {
         case '4':
@@ -4530,39 +4578,40 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
         case '6':
             eee.sn_af = AF_INET6;
         break;
-        case 'B':
+        case 'A':
             if (!optarg || strlen(optarg) == 0) {
-                fprintf(stderr, "Error: Invalid -B option format. Use -B3 or -B 3\n");
+                fprintf(stderr, "Error: Invalid -A option format. Use -A3 or -A 3\n");
                 exit(1);
             }
             for (int i = 0; optarg[i]; i++) {
                 if (!isdigit(optarg[i])) {
-                    fprintf(stderr, "Error: Invalid -B option format. Use -B3 or -B 3\n");
+                    fprintf(stderr, "Error: Invalid -A option format. Use -A3 or -A 3\n");
                     exit(1);
                 }
             }
             encrypt_mode = atoi(optarg);
             if (encrypt_mode < 1 || encrypt_mode > 5) {
-                fprintf(stderr, "Error: Invalid encryption mode. Use B1-B5\n");
+                fprintf(stderr, "Error: Invalid encryption mode. Use A1-A5\n");
                 exit(1);
             }
             break;
         case'K':
-            fprintf(stderr, "Error: -K (keyfile) is no longer supported. Use -k with -B3/-B4/-B5.\n");
+            fprintf(stderr, "Error: -K (keyfile) is no longer supported. Use -k with -A3/-A4/-A5.\n");
             exit(1);
-        case 'a': /* IP address and mode of TUNTAP interface */
+        case 'a': /* IP address and mode of TUNTAP interface (auto-detect IPv4/IPv6) */
             if (optarg && strlen(optarg) > 0) {
-                scan_address(ip_addr, N2N_NETMASK_STR_SIZE,
-                             ip_mode, N2N_IF_MODE_SIZE,
-                             &ip_prefixlen, optarg );
+                if (strchr(optarg, ':')) {
+                    scan_address6(ip6_addr, INET6_ADDRSTRLEN, &ip6_prefixlen, optarg );
+                } else {
+                    scan_address(ip_addr, N2N_NETMASK_STR_SIZE,
+                                 ip_mode, N2N_IF_MODE_SIZE,
+                                 &ip_prefixlen, optarg );
+                }
             } else {
                 default_ip_assignment = 1;
                 strcpy(ip_mode, "static");
                 ip_prefixlen = 24;
             }
-            break;
-        case 'A': /* IP address and mode of TUNTAP interface */
-            scan_address6(ip6_addr, INET6_ADDRSTRLEN, &ip6_prefixlen, optarg );
             break;
         case 'c': /* community as a string */
             memset( eee.community_name, 0, N2N_COMMUNITY_SIZE );

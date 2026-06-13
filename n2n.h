@@ -421,6 +421,10 @@ struct n2n_edge
     size_t              rx_p2p;
     size_t              tx_sup;
     size_t              rx_sup;
+    size_t              super_tx_bytes;
+    size_t              super_rx_bytes;
+    size_t              p2p_tx_bytes;
+    size_t              p2p_rx_bytes;
 
 #ifdef _WIN32
     volatile int        keep_running;

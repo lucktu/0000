@@ -1,41 +1,29 @@
+/**
+ * (C) 2026-27 - lucktu <lucktu.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not see see <http://www.gnu.org/licenses/>
+ *
+ * Code contributions courtesy of:
+ * lucktu <lucktu@msn.com>
+ *
+ * See bypass.h for design overview.
+ */
+
 #ifndef BYPASS_H
 #define BYPASS_H
 
 struct peer_info;  /* forward declaration */
-
-/*
- * Bypass module for n2n edge on Linux.
- *
- * Bypass creates an alternative data path for TCP and ICMP traffic between
- * directly-connected peers. It uses iptables REDIRECT to intercept outgoing
- * TCP and ICMP to virtual IPs, proxies them through a raw UDP channel
- * (reusing n2n's existing encryption), and writes reconstructed packets to
- * the remote TAP device.
- *
- * Key design:
- *   - Only effective on Linux (#ifdef __linux__)
- *   - Per-peer iptables rules: different peers can use different paths
- *   - Initiator decides whether to use bypass; passive party must support it
- *   - Bypass negotiation only after P2P direct connection is established
- *   - Two-step handshake: PROBE (via n2n old path) + TEST (via bypass channel)
- *   - Both sides must confirm before switching
- *   - Bypass-active peers skip keepalive timing
- *   - Reuses n2n transop for encryption
- */
-
-/* ===== Bypass packet format (sent over n2n UDP socket) =====
- *
- * [0]  magic_0 = 0xAE
- * [1]  magic_1 = 0xAE
- * [2]  magic_2 = 0xB1
- * [3]  reserved = 0x00
- * [4]  algo_idx  (transop index used for encryption)
- * [5]  flags
- * [6-9] conn_id (big-endian)
- * [10+] payload (encrypted)
- *
- * Total header size: 10 bytes
- */
 
 #define BYPASS_MAGIC_0           0xAE
 #define BYPASS_MAGIC_1           0xAE
@@ -131,6 +119,8 @@ typedef struct bypass_context_s
     uint8_t           tx_transop_idx;  /* transop index for encoding */
     size_t            bp_tx_bytes;
     size_t            bp_rx_bytes;
+    size_t            bp_tx_pkts;      /* packet count for mgmt display */
+    size_t            bp_rx_pkts;
     uint32_t          tap_ip;          /* TAP device IP (network order) */
     uint8_t           tap_prefix;
     uint8_t           tap_mac[6];

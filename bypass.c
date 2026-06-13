@@ -1,8 +1,21 @@
-/*
- * bypass.c - Bypass module for n2n edge on Linux
+/**
+ * (C) 2026-27 - lucktu <lucktu.com>
  *
- * Provides an alternative data path for TCP and ICMP traffic between
- * directly-connected peers, bypassing the n2n packet header overhead.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not see see <http://www.gnu.org/licenses/>
+ *
+ * Code contributions courtesy of:
+ * lucktu <lucktu@msn.com>
  *
  * See bypass.h for design overview.
  */
@@ -122,7 +135,10 @@ static int bypass_sendto(bypass_context_t *ctx, const uint8_t *buf, size_t len,
         sock = eee->udp_sock;
     if (sock == -1)
         return -1;
-    return sendto_sock(sock, buf, len, dst);
+    int ret = (int)sendto_sock(sock, buf, len, dst);
+    if (ret > 0)
+        ++ctx->bp_tx_pkts;
+    return ret;
 }
 
 /** Non-blocking sendto for bypass data packets.
@@ -148,6 +164,7 @@ static int bypass_sendto_nb(bypass_context_t *ctx, const uint8_t *buf, size_t le
             return -2;
         return -1;
     }
+    ++ctx->bp_tx_pkts;
     return (int)sent;
 }
 
@@ -525,6 +542,8 @@ void bypass_handle_recv(bypass_context_t *ctx, const uint8_t *buf,
 
     if (bypass_parse_header(buf, len, &algo_idx, &flags, &conn_id) != 0)
         return;
+
+    ++ctx->bp_rx_pkts;
 
     const uint8_t *enc_payload = buf + BYPASS_HEADER_SIZE;
     size_t enc_len = len - BYPASS_HEADER_SIZE;
