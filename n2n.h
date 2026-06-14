@@ -439,6 +439,19 @@ struct n2n_edge
     bypass_context_t   *bp;
     uint16_t            bp_proxy_port;
     uint8_t             bp_user_disabled; /* set by -x flag before bp is allocated */
+
+    /* Cached PACKET header template for send_packet2net.
+     * Pre-built common + PACKET fields (everything before payload). */
+    uint8_t             cached_pkt_hdr[N2N_PKT_BUF_SIZE];
+    uint16_t            cached_hdr_len;
+    uint8_t             cached_hdr_valid;   /* header is cached */
+    size_t              cached_tx_transop;
+    /* Cached destination for send_PACKET (separate flag from header cache) */
+    uint8_t             cached_dst_valid;   /* destination is cached */
+    n2n_mac_t           cached_dst_mac;
+    n2n_sock_t          cached_dst_sock;
+    time_t              cached_dst_time;    /* when destination was cached */
+    int                 cached_dst_is_peer;
 };
 
 #endif /* _N2N_H_ */

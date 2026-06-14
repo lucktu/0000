@@ -61,6 +61,7 @@
 #define IFACE_UPDATE_INTERVAL           (30) /* sec. How long it usually takes to get an IP lease. */
 #define TRANSOP_TICK_INTERVAL           (10) /* sec */
 #define PUNCH_TIMEOUT                   7    /* sec: give up hole-punch after this */
+#define CACHE_DST_TTL                   2    /* sec: cached P2P destination TTL */
 
 /** maximum length of command line arguments */
 #define MAX_CMDLINE_BUFFER_LENGTH       4096
@@ -2179,18 +2180,41 @@ static int send_PACKET( n2n_edge_t * eee,
     int dest;
     n2n_sock_str_t sockbuf;
     n2n_sock_t destination;
+    time_t now;
 
     /* hexdump( pktbuf, pktlen ); */
 
-    PEERS_LOCK(eee);
-    dest = find_peer_destination(eee, dstMac, &destination);
-    if (dest) { ++(eee->tx_p2p); eee->p2p_tx_bytes += pktlen; }
-    else {
-        ++(eee->tx_sup); eee->super_tx_bytes += pktlen;
-        /* Relay via supernode: fallback destination when no P2P path exists */
-        destination = eee->supernode;
+    now = n2n_now();
+
+    /* Use cached destination if it matches and is still fresh (TTL check).
+     * Cache only for P2P direct (never relay). TTL ensures we periodically
+     * re-evaluate via find_peer_destination, keeping NAT changes detected. */
+    if (eee->cached_dst_valid && eee->cached_dst_is_peer &&
+        memcmp(eee->cached_dst_mac, dstMac, N2N_MAC_SIZE) == 0 &&
+        (now - eee->cached_dst_time) < CACHE_DST_TTL)
+    {
+        dest = 1;
+        destination = eee->cached_dst_sock;
+        ++(eee->tx_p2p); eee->p2p_tx_bytes += pktlen;
+    } else {
+        PEERS_LOCK(eee);
+        dest = find_peer_destination(eee, dstMac, &destination);
+        if (dest) { ++(eee->tx_p2p); eee->p2p_tx_bytes += pktlen; }
+        else {
+            ++(eee->tx_sup); eee->super_tx_bytes += pktlen;
+            /* Relay via supernode: fallback destination when no P2P path exists */
+            destination = eee->supernode;
+        }
+        PEERS_UNLOCK(eee);
+        /* Cache only P2P direct destinations, never relay addresses */
+        if (dest) {
+            memcpy(eee->cached_dst_mac, dstMac, N2N_MAC_SIZE);
+            eee->cached_dst_sock = destination;
+            eee->cached_dst_time = now;
+            eee->cached_dst_is_peer = 1;
+            eee->cached_dst_valid = 1;
+        }
     }
-    PEERS_UNLOCK(eee);
 
     traceEvent( TRACE_DEBUG, "send_PACKET to %s", sock_to_cstr( sockbuf, &destination ) );
 
@@ -2295,29 +2319,50 @@ static void send_packet2net(n2n_edge_t * eee,
 
     /* Optionally compress then apply transforms, eg encryption. */
 
+    memcpy( destMac, tap_pkt, N2N_MAC_SIZE );
+
     /* Once processed, send to destination in PACKET */
-
-    memcpy( destMac, tap_pkt, N2N_MAC_SIZE ); /* dest MAC is first in ethernet header */
-
-    memset( &cmn, 0, sizeof(cmn) );
-    cmn.ttl = N2N_DEFAULT_TTL;
-    cmn.pc = n2n_packet;
-    cmn.flags=0; /* no options, not from supernode, no socket */
-    memcpy( cmn.community, eee->community_name, N2N_COMMUNITY_SIZE );
-
-    memset( &pkt, 0, sizeof(pkt) );
-    memcpy( pkt.srcMac, eee->device.mac_addr, N2N_MAC_SIZE);
-    memcpy( pkt.dstMac, destMac, N2N_MAC_SIZE);
-
     tx_transop_idx = edge_choose_tx_transop( eee );
 
-    pkt.sock.family=0; /* do not encode sock */
-    pkt.transform = eee->transop[tx_transop_idx].transform_id;
+    /* Use pre-cached header template if available for this peer and transform.
+     * The template has cmn + PACKET fields pre-encoded with dstMac as the
+     * only variable (padded to fixed position). */
+    if (eee->cached_hdr_valid &&
+        eee->cached_tx_transop == tx_transop_idx &&
+        memcmp(eee->cached_dst_mac, destMac, N2N_MAC_SIZE) == 0)
+    {
+        /* Fast path: reuse cached header + destination */
+        memcpy(pktbuf, eee->cached_pkt_hdr, eee->cached_hdr_len);
+        idx = eee->cached_hdr_len;
+    }
+    else
+    {
+        /* Slow path: build header from scratch, cache it */
+        memset( &cmn, 0, sizeof(cmn) );
+        cmn.ttl = N2N_DEFAULT_TTL;
+        cmn.pc = n2n_packet;
+        cmn.flags=0;
+        memcpy( cmn.community, eee->community_name, N2N_COMMUNITY_SIZE );
 
-    idx=0;
-    encode_PACKET( pktbuf, &idx, &cmn, &pkt );
+        memset( &pkt, 0, sizeof(pkt) );
+        memcpy( pkt.srcMac, eee->device.mac_addr, N2N_MAC_SIZE);
+        memcpy( pkt.dstMac, destMac, N2N_MAC_SIZE);
+
+        pkt.sock.family=0;
+        pkt.transform = eee->transop[tx_transop_idx].transform_id;
+
+        idx=0;
+        encode_PACKET( pktbuf, &idx, &cmn, &pkt );
+
+        /* Cache the header template */
+        eee->cached_hdr_len = (uint16_t)idx;
+        memcpy(eee->cached_pkt_hdr, pktbuf, idx);
+        memcpy(eee->cached_dst_mac, destMac, N2N_MAC_SIZE);
+        eee->cached_tx_transop = tx_transop_idx;
+        eee->cached_hdr_valid = 1;
+    }
     traceEvent( TRACE_DEBUG, "encoded PACKET header of size=%u transform %u (idx=%u)",
-                (unsigned int)idx, (unsigned int)pkt.transform, (unsigned int)tx_transop_idx );
+                (unsigned int)idx, (unsigned int)eee->transop[tx_transop_idx].transform_id, (unsigned int)tx_transop_idx );
 
     idx += eee->transop[tx_transop_idx].fwd( &(eee->transop[tx_transop_idx]),
                                              pktbuf+idx, N2N_PKT_BUF_SIZE-idx,
