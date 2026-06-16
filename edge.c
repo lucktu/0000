@@ -656,7 +656,7 @@ static void help() {
 
     printf("Usage: edge [config_file] <options>\n");
     printf("or: edge -a <tun IP address> -c <community> -k <encrypt key> -A <mode> -l <supernode host:port>\n");
-    printf("or: edge -c <community> (default: -d n2nx -a 10.64.0.x -l ouno.eu.org:10084; no password, not secure, not recommended)\n");
+    printf("or: edge -c <community> (default: -d n2nx -a 10.64.0.x -l ouno.eu.org:10084)\n");
     printf("\n");
 
     printf("-a <addr>[/<prefixlen>]  | Set interface IP address (IPv4 or IPv6, auto-detected).\n");
@@ -701,7 +701,7 @@ static void help() {
     printf("-E                       | Accept multicast MAC addresses (default: drop).\n");
     printf("-v                       | Make more verbose. Repeat as required.\n");
     printf("-t <port|path>           | Management Socket (UDP Port or absolute path). (default: %d)\n", N2N_EDGE_MGMT_PORT);
-    printf("-x [port]                | Disable bypass. Optionally set bypass port (default: %d)\n", BYPASS_DEFAULT_PORT);
+    printf("-x [port]                | Disable bypass (no port). Optionally set bypass port (default: %d)\n", BYPASS_DEFAULT_PORT);
     printf("-h                       | Show this help message\n");
 
     printf("\nEnvironment variables:\n");
@@ -4551,6 +4551,8 @@ int main(int argc, char* argv[])
 
     char    device_mac[N2N_MACNAMSIZ]="";
     char *  encrypt_key=NULL;
+    int     has_k_flag = 0;
+    int     has_A_flag = 0;
 
     n2n_edge_t eee; /* single instance for this program */
 
@@ -4652,6 +4654,7 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
             eee.sn_af = AF_INET6;
         break;
         case 'A':
+            has_A_flag = 1;
             if (!optarg || strlen(optarg) == 0) {
                 fprintf(stderr, "Error: Invalid -A option format. Use -A3 or -A 3\n");
                 exit(1);
@@ -4717,6 +4720,7 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
             break;
 
         case 'k': /* encrypt key */
+            has_k_flag = 1;
             traceEvent(TRACE_DEBUG, "encrypt_key = '%s'", encrypt_key);
             encrypt_key = strdup(optarg);
             break;
@@ -4797,6 +4801,20 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
             break;
 
         } /* end switch */
+    }
+
+    /* If neither -k nor -A was given and no key from N2N_KEY,
+     * split -c value in half: first half = community name,
+     * second half = encryption key. */
+    if (!has_k_flag && !has_A_flag && encrypt_key == NULL && eee.community_name[0] != 0) {
+        size_t len = strlen((const char *)eee.community_name);
+        size_t half = len / 2;
+
+        if (half < len) {
+            encrypt_key = strdup((const char *)&eee.community_name[half]);
+        }
+
+        memset(&eee.community_name[half], 0, N2N_COMMUNITY_SIZE - half);
     }
 
     if (eee.sn_num == 0) {
