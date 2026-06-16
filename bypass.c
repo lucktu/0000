@@ -1434,29 +1434,66 @@ int bypass_init(bypass_context_t *ctx, struct n2n_edge *edge,
         return -1;
     }
 
-    int optval = 1;
-    setsockopt(ctx->proxy_sock, SOL_SOCKET, SO_REUSEADDR,
-               &optval, sizeof(optval));
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    /* Try to bind starting from proxy_port, incrementing on conflict.
+     * We do NOT set SO_REUSEADDR during probing so that EADDRINUSE
+     * reliably tells us the port is taken by another listener. */
+    {
+        uint16_t try_port = ctx->proxy_port;
+        uint16_t max_try = 1000;
+        int bind_ok = 0;
+
+        for (uint16_t attempt = 0; attempt < max_try; attempt++) {
+            addr.sin_port = htons(try_port);
+
+            if (bind(ctx->proxy_sock, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+                ctx->proxy_port = try_port;
+                bind_ok = 1;
+                break;
+            }
+
+            /* Port is taken, try next */
+            if (attempt < max_try - 1) {
+                closesocket(ctx->proxy_sock);
+                ctx->proxy_sock = socket(AF_INET, SOCK_STREAM, 0);
+                if (ctx->proxy_sock < 0) {
+                    traceEvent(TRACE_WARNING, "bypass: failed to create proxy socket: %s",
+                               strerror(errno));
+                    ctx->enabled = 0;
+                    return -1;
+                }
+            }
+
+            try_port++;
+            if (try_port == 0)
+                try_port = 1024; /* wrap around, skip well-known */
+        }
+
+        if (!bind_ok) {
+            traceEvent(TRACE_WARNING, "bypass: failed to bind proxy port after %u attempts",
+                       max_try);
+            closesocket(ctx->proxy_sock);
+            ctx->proxy_sock = -1;
+            ctx->enabled = 0;
+            return -1;
+        }
+    }
+
+    /* Now enable SO_REUSEADDR so listen doesn't fail on TIME_WAIT, etc. */
+    {
+        int optval = 1;
+        setsockopt(ctx->proxy_sock, SOL_SOCKET, SO_REUSEADDR,
+                   &optval, sizeof(optval));
+    }
 
     /* Set non-blocking so accept never blocks */
     {
         int fl = fcntl(ctx->proxy_sock, F_GETFL, 0);
         fcntl(ctx->proxy_sock, F_SETFL, fl | O_NONBLOCK);
-    }
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = htons(ctx->proxy_port);
-
-    if (bind(ctx->proxy_sock, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-        traceEvent(TRACE_WARNING, "bypass: failed to bind proxy port %u: %s",
-                   ctx->proxy_port, strerror(errno));
-        closesocket(ctx->proxy_sock);
-        ctx->proxy_sock = -1;
-        ctx->enabled = 0;
-        return -1;
     }
 
     if (listen(ctx->proxy_sock, 32) != 0) {

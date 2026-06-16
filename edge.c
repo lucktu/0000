@@ -4992,6 +4992,8 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
                 traceEvent(TRACE_WARNING, "Bypass init failed, continuing without bypass");
                 free(eee.bp);
                 eee.bp = NULL;
+            } else {
+                eee.bp_proxy_port = eee.bp->proxy_port;
             }
         }
     }
