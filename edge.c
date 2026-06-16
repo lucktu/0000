@@ -656,7 +656,7 @@ static void help() {
 
     printf("Usage: edge [config_file] <options>\n");
     printf("or: edge -a <tun IP address> -c <community> -k <encrypt key> -A <mode> -l <supernode host:port>\n");
-    printf("or: edge -c <community> (default: -d n2nx -a 10.64.0.x -l ouno.eu.org:10084)\n");
+    printf("or: edge -c <community> (default: -d n2nx -a 10.64.0.x -l n2n6.ouno.eu.org)\n");
     printf("\n");
 
     printf("-a <addr>[/<prefixlen>]  | Set interface IP address (IPv4 or IPv6, auto-detected).\n");
@@ -674,9 +674,9 @@ static void help() {
     printf("                         : A5 = Speck(-k). '-A1' can also be used as '-A 1' (default: twofish)\n");
     printf("-c <community>           | n2n community name the edge belongs to.\n");
     printf("-k <encrypt key>         | Encryption key (ASCII, max 32) - also N2N_KEY=<encrypt key>.\n");
-    printf("-l <supernode host:port> | Supernode address Formats (default: ouno.eu.org:10084):\n");
-    printf("                         : host:port  - Direct address (e.g. ouno.eu.org:10084)\n");
-    printf("                         : host       - Query DNS TXT record for address (e.g. n2n.example.com)\n");
+    printf("-l <supernode host:port> | Supernode address Formats (default: n2n6.ouno.eu.org):\n");
+    printf("                         : host:port  - Direct address (e.g. 1.2.3.4:5678)\n");
+    printf("                         : host       - Query DNS TXT record for address (e.g. n2n6.ouno.eu.org)\n");
     printf("-4/-6                    | Resolve supernode DNS name as IPv4 or IPv6 (default: auto)\n");
 #if N2N_CAN_NAME_IFACE && !defined(_WIN32)
     printf("-d <tun device>          | tun device name\n");
@@ -4818,7 +4818,7 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
     }
 
     if (eee.sn_num == 0) {
-        strcpy(eee.sn_ip_array[0], "ouno.eu.org:10084");
+        strcpy(eee.sn_ip_array[0], "n2n6.ouno.eu.org");
         eee.sn_num = 1;
     }
 
@@ -4861,7 +4861,7 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
     traceEvent(TRACE_NORMAL, "Starting edge %s", n2n_sw_version);
 
     for (int i = 0; i < eee.sn_num; ++i) {
-        if (strcmp(eee.sn_ip_array[i], "ouno.eu.org:10084") == 0) continue;
+        if (strcmp(eee.sn_ip_array[i], "n2n6.ouno.eu.org") == 0) continue;
         traceEvent(TRACE_NORMAL, "Supernode %u => %s", i, (eee.sn_ip_array[i]));
     }
 
