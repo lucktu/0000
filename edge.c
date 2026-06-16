@@ -671,7 +671,7 @@ static void help() {
     printf(", A4 = ChaCha20(-k)");
     #endif
     printf("\n");
-    printf("                         : A5 = Speck(-k). '-A1' can also be used as '-A 1' (default: twofish)\n");
+    printf("                         : A5 = Speck(-k). '-A1' can also be used as '-A 1' (default: chacha20)\n");
     printf("-c <community>           | n2n community name the edge belongs to.\n");
     printf("-k <encrypt key>         | Encryption key (ASCII, max 32) - also N2N_KEY=<encrypt key>.\n");
     printf("-l <supernode host:port> | Supernode address Formats (default: n2n6.ouno.eu.org):\n");
@@ -4537,7 +4537,7 @@ int main(int argc, char* argv[])
     int     mtu = DEFAULT_MTU;
     int     got_s = 0;
     struct tuntap_config tuntap_config;
-    int encrypt_mode = 2;
+    int encrypt_mode = 4;
 
 #ifndef _WIN32
     uid_t   userid = 0;
