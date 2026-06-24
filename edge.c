@@ -2900,7 +2900,7 @@ static void readFromMgmtSocket(n2n_edge_t *eee, int *keep_running) {
 
     /* Send community info */
     msg_len = snprintf((char*)udp_buf, N2N_PKT_BUF_SIZE,
-                       "community: %s\n", eee->community_name);
+                       "community: %s\n", eee->community_name_full[0] ? eee->community_name_full : eee->community_name);
     sendto(eee->mgmt_sock, udp_buf, msg_len, 0/*flags*/,
            (struct sockaddr*) &sender_sock, i);
 
@@ -4693,6 +4693,7 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
         case 'c': /* community as a string */
             memset( eee.community_name, 0, N2N_COMMUNITY_SIZE );
             strncpy( (char *)eee.community_name, optarg, N2N_COMMUNITY_SIZE);
+            memcpy(eee.community_name_full, eee.community_name, N2N_COMMUNITY_SIZE);
             break;
         case 'E': /* multicast ethernet addresses accepted. */
             eee.drop_multicast=0;
@@ -4804,18 +4805,37 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
         } /* end switch */
     }
 
-    /* If neither -k nor -A was given and no key from N2N_KEY,
-     * split -c value in half: first half = community name,
-     * second half = encryption key. */
-    if (!has_k_flag && !has_A_flag && encrypt_key == NULL && eee.community_name[0] != 0) {
-        size_t len = strlen((const char *)eee.community_name);
-        size_t half = len / 2;
+    /* Save full community name for local display, then obfuscate what
+     * gets sent to the supernode when no encryption key is available
+     * or encryption is explicitly disabled (-A1).
+     *
+     * When encryption is disabled (null_transop):
+     *   - Only the first half of the community name is sent to the supernode
+     *     (e.g. "mycommunity" → "mycom" on the wire)
+     *   - If neither -k nor -A was explicitly given (simple mode), the second
+     *     half is used as the encryption key */
+    {
+        char full_community[N2N_COMMUNITY_SIZE];
+        memcpy(full_community, eee.community_name, N2N_COMMUNITY_SIZE);
 
-        if (half < len) {
-            encrypt_key = strdup((const char *)&eee.community_name[half]);
+        int no_encrypt = (encrypt_key == NULL) || (has_A_flag && encrypt_mode == 1);
+
+        if (no_encrypt && eee.community_name[0] != 0) {
+            size_t len = strlen((const char *)eee.community_name);
+            size_t half = len / 2;
+
+            if (half < len) {
+                /* Simple mode: no -k and no -A given → use second half as key */
+                if (!has_k_flag && !has_A_flag) {
+                    encrypt_key = strdup((const char *)&eee.community_name[half]);
+                }
+                /* Truncate: only first half goes to supernode */
+                memset(&eee.community_name[half], 0, N2N_COMMUNITY_SIZE - half);
+            }
         }
 
-        memset(&eee.community_name[half], 0, N2N_COMMUNITY_SIZE - half);
+        /* Use full name for local display */
+        memcpy(eee.community_name_full, full_community, N2N_COMMUNITY_SIZE);
     }
 
     if (eee.sn_num == 0) {
@@ -4902,7 +4922,7 @@ if (argc > 1 && argv[1][0] != '-' && access(argv[1], R_OK) == 0) {
     }
 
     tuntap_config.if_name = tuntap_dev_name;
-    tuntap_config.community_name = (const char*)eee.community_name;
+    tuntap_config.community_name = (const char*)eee.community_name_full;
     if (device_mac[0] != '\0') {
         if (6 != sscanf(device_mac, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
             &tuntap_config.device_mac[0], &tuntap_config.device_mac[1],

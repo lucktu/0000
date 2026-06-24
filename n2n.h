@@ -370,6 +370,7 @@ struct n2n_edge
     int                 sn_wait;
 
     n2n_community_t     community_name;
+    n2n_community_t     community_name_full;  /* full name before truncation for local display */
     char                keyschedule[N2N_PATHNAME_MAXLEN];
     int                 null_transop;
     char                supernode_version[16];
