@@ -250,9 +250,10 @@ static void free_community_stats(struct community_stats **head)
 }
 
 /* Derive .dat path from config path */
-static void stats_dat_path(const char *cfg, char *out, size_t sz)
+/** Derive stats file path: replace .cfg suffix with .dat */
+static void stats_dat_path(const char *cfgpath, char *out, size_t sz)
 {
-    strncpy(out, cfg, sz - 1);
+    strncpy(out, cfgpath, sz - 1);
     out[sz - 1] = '\0';
     char *dot = strrchr(out, '.');
     char *slash = strrchr(out, '/');
@@ -264,6 +265,23 @@ static void stats_dat_path(const char *cfg, char *out, size_t sz)
         strcpy(dot, ".dat");
     else
         strncat(out, ".dat", sz - strlen(out) - 1);
+}
+
+/** Derive cfg file path: replace .dat suffix with .cfg */
+static void stats_cfg_path(const char *datpath, char *out, size_t sz)
+{
+    strncpy(out, datpath, sz - 1);
+    out[sz - 1] = '\0';
+    char *dot = strrchr(out, '.');
+    char *slash = strrchr(out, '/');
+#ifdef _WIN32
+    char *bslash = strrchr(out, '\\');
+    if (!slash || (bslash && bslash > slash)) slash = bslash;
+#endif
+    if (dot && dot > slash)
+        strcpy(dot, ".cfg");
+    else
+        strncat(out, ".cfg", sz - strlen(out) - 1);
 }
 
 /* Free all rate limit rules */
@@ -279,17 +297,19 @@ static void free_rate_limit_rules(struct rate_limit_rule **head)
 }
 
 /* Parse -L config file */
-static void parse_rate_limit_config(const char *path,
+static void parse_rate_limit_config(const char *datpath,
                                      int *enabled,
                                      struct rate_limit_rule **rules)
 {
+    char cfgpath[512];
+    stats_cfg_path(datpath, cfgpath, sizeof(cfgpath));
     free_rate_limit_rules(rules);
     *enabled = 0;
 
-    FILE *fp = fopen(path, "r");
+    FILE *fp = fopen(cfgpath, "r");
     if (!fp) {
         /* Create default config */
-        fp = fopen(path, "w");
+        fp = fopen(cfgpath, "w");
         if (fp) {
             fprintf(fp, "# N2N Supernode traffic statistics and rate limiting\n");
             fprintf(fp, "# enabled on|off\n");
