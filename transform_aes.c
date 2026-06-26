@@ -29,7 +29,7 @@ typedef struct transop_aes {
     n2n_aes_context_t *dec_ctx;
     n2n_aes_context_t *iv_enc_ctx;   /* AES128 context for IV encryption */
     uint8_t            iv_pad_val[TRANSOP_AES_IV_PADDING_SIZE];
-    uint8_t            assembly[N2N_TRANSFORM_BUF_SIZE]; /* heap-allocated to avoid large stack */
+    uint8_t            assembly[N2N_TRANSFORM_BUF_SIZE]; /* encode workspace (bypass LAN KCP needs >4KB) */
 } transop_aes_t;
 
 static int transop_deinit_aes(n2n_trans_op_t *arg) {
@@ -69,7 +69,6 @@ static ssize_t transop_encode_aes(n2n_trans_op_t *arg,
 
     int len2 = ((in_len / N2N_AES_BLOCK_SIZE) + 1) * N2N_AES_BLOCK_SIZE;
     memcpy(priv->assembly, inbuf, in_len);
-    /* Only zero the padding area, not the whole buffer */
     memset(priv->assembly + in_len, 0, len2 - in_len);
     priv->assembly[len2 - 1] = (uint8_t)(len2 - in_len);
 
@@ -99,12 +98,12 @@ static ssize_t transop_decode_aes(n2n_trans_op_t *arg,
 
     n2n_aes_ivec_t dec_ivec = {0};
     set_aes_cbc_iv(priv, dec_ivec, iv_seed);
-    n2n_aes_cbc_decrypt(priv->assembly, inbuf + TRANSOP_AES_PREAMBLE_SIZE, len, dec_ivec, priv->dec_ctx);
+    /* Decrypt directly to outbuf — saves one memcpy */
+    n2n_aes_cbc_decrypt(outbuf, inbuf + TRANSOP_AES_PREAMBLE_SIZE, len, dec_ivec, priv->dec_ctx);
 
-    uint8_t padding = priv->assembly[len - 1] & 0xff;
+    uint8_t padding = outbuf[len - 1] & 0xff;
     if (len < (int)padding) return 0;
     len -= padding;
-    memcpy(outbuf, priv->assembly, len);
     return len;
 }
 
@@ -113,7 +112,6 @@ static int setup_aes_key(transop_aes_t *priv, const uint8_t *key, ssize_t key_si
     uint8_t key_mat_buf[N2N_SHA512_DIGEST_LENGTH + N2N_SHA256_DIGEST_LENGTH];
     size_t key_mat_buf_length;
 
-    /* Key derivation identical to cnn2n */
     if (key_size >= 65) {
         aes_key_size_bytes = AES256_KEY_BYTES;
         n2n_sha512(key, key_size, key_mat_buf);
