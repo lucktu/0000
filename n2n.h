@@ -318,6 +318,7 @@ extern char* msg_type2str(uint16_t msg_type);
 extern void hexdump(const uint8_t * buf, size_t len);
 
 void print_n2n_version();
+int query_mgmt(uint16_t mgmt_port);
 
 
 /* Operations on peer_info lists. */

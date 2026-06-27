@@ -510,3 +510,102 @@ int sock_equal( const n2n_sock_t * a,
 
     return 0;
 }
+
+/* *********************************************** */
+
+/** Query management port and display results interactively.
+ *
+ * Sends "status" to the management UDP port on localhost,
+ * prints all response packets (management sends multiple datagrams),
+ * then enters a loop where the user can press Enter to refresh
+ * or Ctrl+C to quit.
+ */
+int query_mgmt(uint16_t mgmt_port) {
+    SOCKET s;
+    struct sockaddr_in addr;
+    char buf[4096];
+    const char *cmd = "status\n";
+    fd_set fds;
+    struct timeval tv;
+    int ret;
+    int got_data = 0;
+
+    s = socket(PF_INET, SOCK_DGRAM, 0);
+    if (s < 0) {
+        printf("Failed to create socket\n");
+        return -1;
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(mgmt_port);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    /* Send query */
+    sendto(s, cmd, (int)strlen(cmd), 0, (struct sockaddr*)&addr, sizeof(addr));
+
+    /* Receive all response packets (management sends multiple datagrams) */
+    for (;;) {
+        FD_ZERO(&fds);
+        FD_SET(s, &fds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 50000;  /* 50ms per packet */
+        ret = select((int)(s+1), &fds, NULL, NULL, &tv);
+        if (ret <= 0) break;  /* timeout or error: no more data */
+        ret = (int)recvfrom(s, buf, sizeof(buf)-1, 0, NULL, NULL);
+        if (ret <= 0) break;
+        buf[ret] = '\0';
+        printf("%s", buf);
+        got_data = 1;
+    }
+
+    if (!got_data) {
+        printf("\nNo response from management port %u\n", (unsigned)mgmt_port);
+        closesocket(s);
+        return -1;
+    }
+
+    /* Interactive refresh loop: empty line = status, else send command then status */
+    printf("\n--- Press Enter to refresh, or type a command, Ctrl+C to quit ---\n");
+    while (1) {
+        char line[128];
+        int i = 0, ch;
+
+        /* Read a line of input */
+        while (1) {
+            ch = getchar();
+            if (ch == EOF) goto done;
+            if (ch == '\n') break;
+            if (i < (int)sizeof(line) - 2) line[i++] = (char)ch;
+        }
+        line[i] = '\0';
+
+        /* Empty line → status; otherwise send user command only */
+        if (i == 0) {
+            sendto(s, cmd, (int)strlen(cmd), 0, (struct sockaddr*)&addr, sizeof(addr));
+        } else {
+            if (line[i-1] != '\n') { line[i] = '\n'; i++; line[i] = '\0'; }
+            sendto(s, line, i, 0, (struct sockaddr*)&addr, sizeof(addr));
+        }
+        printf("\033[2J\033[H");
+
+        for (;;) {
+            FD_ZERO(&fds);
+            FD_SET(s, &fds);
+            tv.tv_sec = 0;
+            tv.tv_usec = 50000;
+            ret = select((int)(s+1), &fds, NULL, NULL, &tv);
+            if (ret <= 0) break;
+            ret = (int)recvfrom(s, buf, sizeof(buf)-1, 0, NULL, NULL);
+            if (ret <= 0) break;
+            buf[ret] = '\0';
+            printf("%s", buf);
+        }
+
+        printf("\n--- Press Enter to refresh, or type a command, Ctrl+C to quit ---\n");
+    }
+
+done:
+    closesocket(s);
+    return 0;
+}

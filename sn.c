@@ -1981,7 +1981,8 @@ static void help(int argc, char * const argv[])
     fprintf( stderr, "-l <lport>\tSet UDP main listen port to <lport>\n" );
     fprintf( stderr, "-L <file> \tTraffic statistics file (config auto-derived as .cfg)\n" );
     fprintf( stderr, "-4|-6     \tIP mode: -4 (IPv4 only), -6 (IPv6 only), both/none (dual-stack)\n" );
- #ifndef _WIN32
+    fprintf( stderr, "-Q <port> \tQuery management port (for standalone use). (default: %d)\n", N2N_SN_MGMT_PORT );
+#ifndef _WIN32
     fprintf( stderr, "-t <port>\tSet management UDP port to <port> (default: 5646)\n" );
 #endif
 #if defined(N2N_HAVE_DAEMON)
@@ -2033,6 +2034,21 @@ int main( int argc, char * const argv[] )
         return 1;
     }
 #endif
+
+    /* Handle -Q before any initialization: optional port argument */
+    {
+        int i;
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "-Q") == 0) {
+                uint16_t qport = N2N_SN_MGMT_PORT;
+                if (i + 1 < argc && argv[i+1][0] != '-') {
+                    int p = atoi(argv[i+1]);
+                    if (p > 0 && p <= 65535) qport = (uint16_t)p;
+                }
+                return query_mgmt(qport);
+            }
+        }
+    }
 
     init_sn( &sss );
 

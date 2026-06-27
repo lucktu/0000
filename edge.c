@@ -655,13 +655,13 @@ static void help() {
     printf("\n");
 
     printf("Usage: edge [config_file] <options>\n");
-    printf("or: edge -c <community> (default: -d n2nx -a 10.64.0.x -l n2n6.ouno.eu.org)\n");
+    printf("or: edge -c <community> (default: -a 10.64.0.x -l n2n6.ouno.eu.org)\n");
     printf("or: edge -a <tun IP address> -c <community> -k <encrypt key> -A <mode> -l <supernode host:port>\n");
     printf("\n");
 
     printf("-a <addr>[/<prefixlen>]  | Set interface IP address (IPv4 or IPv6, auto-detected).\n");
-    printf("                         : For DHCP use '-r -a dhcp:0.0.0.0/0'\n");
-    printf("                         : If not specified, auto-assigns 10.64.0.x from supernode\n");
+    printf("                         : for DHCP use '-r -a dhcp:0.0.0.0/0'\n");
+    printf("                         : if not specified, auto-assigns 10.64.0.x from supernode\n");
     printf("-A <mode>                | Encryption:");
     printf(" A1 = disable, A2 = twofish(-k)");
     #ifdef N2N_HAVE_AES
@@ -672,16 +672,16 @@ static void help() {
     #endif
     printf("\n");
     printf("                         : A5 = Speck(-k). '-A1' can also be used as '-A 1' (default: chacha20)\n");
-    printf("-c <community>           | n2n community name the edge belongs to.\n");
+    printf("-c <community>           | N2n community name the edge belongs to.\n");
     printf("-k <encrypt key>         | Encryption key (ASCII, max 32) - also N2N_KEY=<encrypt key>.\n");
     printf("-l <supernode host:port> | Supernode address Formats (default: n2n6.ouno.eu.org):\n");
     printf("                         : host:port  - Direct address (e.g. 1.2.3.4:5678)\n");
     printf("                         : host       - Query DNS TXT record for address (e.g. n2n6.ouno.eu.org)\n");
     printf("-4/-6                    | Resolve supernode DNS name as IPv4 or IPv6 (default: auto)\n");
 #if N2N_CAN_NAME_IFACE && !defined(_WIN32)
-    printf("-d <tun device>          | tun device name\n");
+    printf("-d <tun device>          | Tun device name\n");
 #elif N2N_CAN_NAME_IFACE && defined(_WIN32)
-    printf("-d <tun device>          | tun device name (optional)\n");
+    printf("-d <tun device>          | Tun device name (optional)\n");
 #endif
     printf("-p <local port>          | Fixed local UDP port.\n");
 #ifndef _WIN32
@@ -700,6 +700,7 @@ static void help() {
     printf("-R <dest>/<length>,<gw>  | Enable packet forwarding and add a route, IPv4/6 is autodetected\n");
     printf("-E                       | Accept multicast MAC addresses (default: drop).\n");
     printf("-v                       | Make more verbose. Repeat as required.\n");
+    printf("-Q <port>                | Query management port (for standalone use). (default: %d)\n", N2N_EDGE_MGMT_PORT);
     printf("-t <port|path>           | Management Socket (UDP Port or absolute path). (default: %d)\n", N2N_EDGE_MGMT_PORT);
     printf("-x <port>                | Disable bypass (no port). Optionally set bypass port (default: %d)\n", BYPASS_DEFAULT_PORT);
     printf("-h                       | Show this help message\n");
@@ -3039,10 +3040,6 @@ static void readFromMgmtSocket(n2n_edge_t *eee, int *keep_running) {
                            (unsigned int)peer_list_size(eee->pending_peers),
                            (unsigned int)peer_list_size(eee->known_peers),
                            sup_str, p2p_str);
-        if (eee->bp && eee->bp->enabled && !eee->bp->user_disabled) {
-            msg_len += snprintf((char*)udp_buf + msg_len, N2N_PKT_BUF_SIZE - (size_t)msg_len,
-                                " | bp on %u", (unsigned int)eee->bp->proxy_port);
-        }
         msg_len += snprintf((char*)udp_buf + msg_len, N2N_PKT_BUF_SIZE - (size_t)msg_len,
                             "\n");
     }
@@ -3067,8 +3064,9 @@ static void readFromMgmtSocket(n2n_edge_t *eee, int *keep_running) {
             fmt_bytes(fbr, sizeof(fbr), eee->bp->bp_rx_bytes);
             msg_len = snprintf((char*)udp_buf, N2N_PKT_BUF_SIZE,
                                "Tx/rx: total %s/%s | super %s/%s | p2p %s/%s"
-                               " | bp %s/%s\n",
-                               ft, fr, fst, fsr, fpt, fpr, fbt, fbr);
+                               " | bp %s/%s on %u\n",
+                               ft, fr, fst, fsr, fpt, fpr, fbt, fbr,
+                               (unsigned int)eee->bp->proxy_port);
         } else {
             fmt_bytes(ft, sizeof(ft), total_tx);
             fmt_bytes(fr, sizeof(fr), total_rx);
@@ -4556,6 +4554,21 @@ int main(int argc, char* argv[])
     int     has_A_flag = 0;
 
     n2n_edge_t eee; /* single instance for this program */
+
+/* Handle -Q before any initialization: optional port argument */
+{
+    int i;
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-Q") == 0) {
+            uint16_t qport = N2N_EDGE_MGMT_PORT;
+            if (i + 1 < argc && argv[i+1][0] != '-') {
+                int p = atoi(argv[i+1]);
+                if (p > 0 && p <= 65535) qport = (uint16_t)p;
+            }
+            return query_mgmt(qport);
+        }
+    }
+}
 
 #ifdef HAVE_LIBCAP
 #ifdef PR_CAP_AMBIENT
