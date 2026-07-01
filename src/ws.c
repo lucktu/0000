@@ -83,14 +83,14 @@ static void ws_set_keepalive(SOCKET fd) {
     {
         struct tcp_keepalive ka;
         ka.onoff = 1;
-        ka.keepalivetime = 10000;    /* 10s idle */
+        ka.keepalivetime = 25000;    /* 25s idle */
         ka.keepaliveinterval = 5000; /* 5s interval */
         DWORD ret;
         WSAIoctl(fd, SIO_KEEPALIVE_VALS, &ka, sizeof(ka), NULL, 0, &ret, NULL, NULL);
     }
 #elif defined(TCP_KEEPIDLE)
     {
-        int idle = 10, intvl = 5, cnt = 3;
+        int idle = 25, intvl = 5, cnt = 3;
         setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
         setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
         setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));

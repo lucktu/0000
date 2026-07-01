@@ -5312,17 +5312,14 @@ static int run_loop(n2n_edge_t * eee )
                 }
             }
         }
-        /* WS heartbeat: send ping every 5s (pong updates last_seen in ws_recv) */
+        /* WS mode: rely on TCP keepalive (set in ws_set_keepalive) to detect dead connections,
+         * no application-level ping needed. */
         if (eee->use_ws && eee->ws_conn.state == WS_OPEN) {
-            if (nowTime - eee->ws_conn.last_seen >= 5) {
-                int pr = ws_ping(&eee->ws_conn);
-                if (pr == -1) {
-                    ws_close(&eee->ws_conn);
-                    eee->ws_last_reconnect = nowTime;
-                } else if (pr == 0) {
-                    eee->ws_conn.last_seen = nowTime;
-                }
-                /* pr == -2: EAGAIN, do not close connection, do not update last_seen, retry next cycle */
+            /* check for stale connection via last_seen (updated on data recv only) */
+            if (nowTime - eee->ws_conn.last_seen > 120) {
+                traceEvent(TRACE_WARNING, "WS connection stale, closing");
+                ws_close(&eee->ws_conn);
+                eee->ws_last_reconnect = nowTime;
             }
         }
 
