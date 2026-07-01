@@ -31,6 +31,8 @@ set(N2N_VERSION_FULL "${N2N_VERSION}")
 MESSAGE(STATUS "Git not available, version: ${N2N_VERSION_FULL}")
 endif()
 
+include_directories(src)
+
 add_definitions(-DN2N_VERSION=\"${N2N_VERSION}\")
 add_definitions(-DN2N_VERSION_FULL=\"${N2N_VERSION_FULL}\")
 add_definitions(-DN2N_OSNAME=\"${N2N_OSNAME}\")
@@ -82,9 +84,9 @@ set(CMAKE_INSTALL_DO_STRIP ON)
 
 # Create an n2n object library
 add_library(n2n OBJECT
-        n2n.c
-        wire.c
-        version.c
+        src/n2n.c
+        src/wire.c
+        src/version.c
 )
 set_property(TARGET n2n PROPERTY C_STANDARD 99)
 set(OBJECTS $<TARGET_OBJECTS:n2n>)
@@ -113,38 +115,38 @@ endif(DEFINED WIN32)
 
 # Build n2n static library (enables better dead code elimination when linking)
 add_library(n2n_core STATIC
-        aes.c
-        sha.c
-        twofish.c
-        speck.c
-        pearson.c
-        cc20.c
-        transform_null.c
-        transform_tf.c
-        transform_aes.c
-        transform_cc20.c
-        transform_speck.c
-        n2n_keyfile.c
-        minilzo.c
-        upnp.c
-        bypass.c
-        ikcp.c
-        ws.c
-        tuntap_freebsd.c
-        tuntap_netbsd.c
-        tuntap_linux.c
-        tuntap_osx.c
+        src/aes.c
+        src/sha.c
+        src/twofish.c
+        src/speck.c
+        src/pearson.c
+        src/cc20.c
+        src/transform_null.c
+        src/transform_tf.c
+        src/transform_aes.c
+        src/transform_cc20.c
+        src/transform_speck.c
+        src/n2n_keyfile.c
+        src/minilzo.c
+        src/upnp.c
+        src/bypass.c
+        src/ikcp.c
+        src/ws.c
+        src/tuntap_freebsd.c
+        src/tuntap_netbsd.c
+        src/tuntap_linux.c
+        src/tuntap_osx.c
         ${OBJECTS}
 )
 set_property(TARGET n2n_core PROPERTY C_STANDARD 99)
 
 # Build edge executable
-add_executable(edge edge.c ${EDGE_RESOURCE})
+add_executable(edge src/edge.c ${EDGE_RESOURCE})
 set_property(TARGET edge PROPERTY C_STANDARD 99)
 target_link_libraries(edge n2n_core)
 
 # Build supernode executable
-add_executable(supernode sn.c ${SN_RESOURCE})
+add_executable(supernode src/sn.c ${SN_RESOURCE})
 set_property(TARGET supernode PROPERTY C_STANDARD 99)
 target_link_libraries(supernode n2n_core)
 
@@ -185,18 +187,18 @@ if(DEFINED UNIX)
 add_dependencies(n2n doc)
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/doc)
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/doc/edge.8.gz
-                   COMMAND gzip -c ${PROJECT_SOURCE_DIR}/edge.troff > ${PROJECT_BINARY_DIR}/doc/edge.8.gz
-                   DEPENDS ${PROJECT_SOURCE_DIR}/edge.troff
+                   COMMAND gzip -c ${PROJECT_SOURCE_DIR}/doc/edge.troff > ${PROJECT_BINARY_DIR}/doc/edge.8.gz
+                   DEPENDS ${PROJECT_SOURCE_DIR}/doc/edge.troff
                   )
 
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/doc/supernode.1.gz
-                   COMMAND gzip -c ${PROJECT_SOURCE_DIR}/supernode.troff > ${PROJECT_BINARY_DIR}/doc/supernode.1.gz
-                   DEPENDS ${PROJECT_SOURCE_DIR}/supernode.troff
+                   COMMAND gzip -c ${PROJECT_SOURCE_DIR}/doc/supernode.troff > ${PROJECT_BINARY_DIR}/doc/supernode.1.gz
+                   DEPENDS ${PROJECT_SOURCE_DIR}/doc/supernode.troff
                   )
 
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/doc/n2n_v2.7.gz
-                   COMMAND gzip -c ${PROJECT_SOURCE_DIR}/n2n_v2.troff > ${PROJECT_BINARY_DIR}/doc/n2n_v2.7.gz
-                   DEPENDS ${PROJECT_SOURCE_DIR}/n2n_v2.troff
+                   COMMAND gzip -c ${PROJECT_SOURCE_DIR}/doc/n2n_v2.troff > ${PROJECT_BINARY_DIR}/doc/n2n_v2.7.gz
+                   DEPENDS ${PROJECT_SOURCE_DIR}/doc/n2n_v2.troff
                   )
 
 add_custom_target(doc DEPENDS ${PROJECT_BINARY_DIR}/doc/edge.8.gz

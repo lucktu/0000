@@ -116,7 +116,7 @@ safe if your host has only one login user.
 
 ## Systemd Service (LINUX)
 
-Examples for an systemd service file are provided in the systemd/ folder.
+Examples for an systemd service file are provided in the packages/systemd/ folder.
 The edge service uses AmbientCapabilities to set the net_admin capability
 to run edge as a dynamically created user.
 

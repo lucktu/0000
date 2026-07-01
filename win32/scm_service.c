@@ -1,4 +1,4 @@
-#include "../n2n.h"
+#include "../src/n2n.h"
 #include "n2n_win32.h"
 
 #ifdef _WIN32
